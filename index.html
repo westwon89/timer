@@ -1,0 +1,386 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>타이머</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;600;700&family=JetBrains+Mono:wght@600;800&display=swap">
+<style>
+/* Layout: one working column — activity steps on top, a large clock face, controls under it */
+:root{
+  --bg:#F5F3F8; --surface:#FFFFFF; --ink:#241B38; --muted:#5C5470; --line:#DDD7E8;
+  --vio:#5E3F8F; --vio-soft:#ECE6F5; --warn:#C2410C; --done:#B23F28;
+  --f-body:"IBM Plex Sans KR","Malgun Gothic","Apple SD Gothic Neo",sans-serif;
+  --f-num:"JetBrains Mono",ui-monospace,"Consolas",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#16121F; --surface:#211B2E; --ink:#F1ECFA; --muted:#B3A9C7; --line:#3A3150;
+  --vio:#B79BEA; --vio-soft:#2E2542; --warn:#FB923C; --done:#F87171; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#16121F; --surface:#211B2E; --ink:#F1ECFA; --muted:#B3A9C7; --line:#3A3150;
+  --vio:#B79BEA; --vio-soft:#2E2542; --warn:#FB923C; --done:#F87171; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.wrap{max-width:760px;margin:0 auto;padding-block:20px 28px;display:grid;gap:18px}
+h1{margin:0;font-size:1.05rem;font-weight:700;letter-spacing:.01em;text-wrap:balance}
+h1 span{color:var(--muted);font-weight:400;margin-left:6px;font-size:.9rem}
+.steps{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+@media (max-width:560px){.steps{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.step{font:inherit;text-align:left;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  border-radius:10px;padding:9px 11px;cursor:pointer;display:grid;gap:2px;min-width:0}
+.step b{font-family:var(--f-num);font-size:1.05rem}
+.step small{color:var(--muted);font-size:.8rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.step:hover{border-color:var(--vio)}
+.step[aria-pressed="true"]{background:var(--vio);border-color:var(--vio);color:var(--surface)}
+.step[aria-pressed="true"] small{color:var(--surface);opacity:.85}
+.face{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px 20px 20px;display:grid;gap:10px}
+.label{color:var(--muted);font-size:.9rem;font-weight:600}
+.clock{font-family:var(--f-num);font-weight:800;font-size:clamp(4rem,17vw,9rem);line-height:1;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;color:var(--ink)}
+.clock.warn{color:var(--warn)} .clock.over{color:var(--done)}
+.bar{height:8px;border-radius:99px;background:var(--vio-soft);overflow:hidden}
+.bar i{display:block;height:100%;width:100%;background:var(--vio);transform-origin:left;transition:transform .25s linear}
+.ctrl{display:flex;flex-wrap:wrap;gap:8px}
+.btn{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);
+  padding:10px 14px;cursor:pointer}
+.btn.main{background:var(--vio);border-color:var(--vio);color:var(--surface);min-width:96px}
+.btn:hover{border-color:var(--vio)}
+button:focus-visible{outline:3px solid var(--vio);outline-offset:2px}
+.custom{display:flex;gap:6px;align-items:center;margin-left:auto}
+.custom input{width:58px;font:inherit;padding:9px 8px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+.note{color:var(--muted);font-size:.85rem;line-height:1.6;margin:0}
+.msg{color:var(--warn);font-size:.85rem;margin:0}
+@media (prefers-reduced-motion:reduce){.bar i{transition:none}}
+</style>
+<style>[hidden]{display:none!important}body{margin:0}</style>
+</head>
+<body>
+
+<style>
+.info{display:flex;flex-wrap:wrap;gap:4px 14px;color:var(--muted);font-size:.85rem;font-variant-numeric:tabular-nums}
+.info b{color:var(--ink);font-weight:600}
+details{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 14px}
+summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:10px}
+.rows{display:grid;gap:6px;margin-bottom:10px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) 64px auto 64px auto auto;gap:6px;align-items:center}
+.row input,.opts select{font:inherit;padding:7px 8px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-width:0}
+.row .del{padding:7px 10px}
+.opts{display:grid;gap:10px}
+.opts label{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.opts input[type=range]{width:180px;max-width:100%;accent-color:var(--vio)}
+.keys{display:flex;flex-wrap:wrap;gap:6px 14px;color:var(--muted);font-size:.85rem}
+kbd{font-family:var(--f-num);font-size:.8rem;border:1px solid var(--line);border-bottom-width:2px;border-radius:5px;padding:1px 6px;background:var(--surface);color:var(--ink)}
+.saved{color:var(--vio);font-size:.85rem}
+.listbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.listbar label{font-weight:600;color:var(--muted)}
+.listbar select,.newname{font:inherit;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:0;max-width:100%}
+#shareOut{flex:1 1 100%;font:inherit;font-size:.8rem;padding:7px 9px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);min-width:0}
+.listmsg{color:var(--vio);font-size:.85rem;margin:0}
+@media (max-width:560px){.row{grid-template-columns:minmax(0,1fr) 52px auto 52px auto auto}}
+</style>
+
+<div class="wrap">
+  <h1>타이머 <span>활동을 누르면 시간이 맞춰져요</span></h1>
+
+  <div class="listbar">
+    <label for="setSel">목록</label>
+    <select id="setSel"></select>
+    <button class="btn" id="share" type="button">공유 링크 복사</button>
+    <input id="shareOut" type="text" readonly hidden aria-label="공유 링크">
+  </div>
+  <p class="listmsg" id="listMsg" hidden></p>
+
+  <div class="steps" id="steps"></div>
+
+  <section class="face" aria-live="polite">
+    <div class="label" id="label">입론 준비</div>
+    <div class="clock" id="clock">06:00</div>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="info"><span>지금 <b id="now">--:--</b></span><span>남은 활동 합계 <b id="rest">--:--</b></span><span id="nextInfo"></span></div>
+    <div class="ctrl">
+      <button class="btn main" id="go" type="button">시작</button>
+      <button class="btn" id="plus" type="button">+1분</button>
+      <button class="btn" id="minus" type="button">−1분</button>
+      <button class="btn" id="reset" type="button">처음으로</button>
+      <button class="btn" id="pip" type="button">작게 띄우기</button>
+      <div class="custom">
+        <input id="mins" type="number" min="0" max="99" value="5" aria-label="분">
+        <span>분</span>
+        <input id="secs" type="number" min="0" max="59" step="5" value="0" aria-label="초">
+        <span>초</span>
+        <button class="btn" id="set" type="button">설정</button>
+      </div>
+    </div>
+    <button class="btn main" id="stop" type="button" hidden>알림 끄기 (아무 곳이나 클릭해도 꺼져요)</button>
+    <p class="msg" id="msg" hidden></p>
+  </section>
+
+  <div class="keys">
+    <span><kbd>Space</kbd> 시작 · 일시정지</span>
+    <span><kbd>→</kbd> <kbd>←</kbd> 다음 · 이전 활동</span>
+    <span><kbd>+</kbd> <kbd>−</kbd> 1분 늘리기 · 줄이기</span>
+  </div>
+
+  <details id="editBox">
+    <summary>활동 목록 바꾸기</summary>
+    <div class="rows" id="rows"></div>
+    <div class="ctrl">
+      <button class="btn" id="addRow" type="button">+ 활동 추가</button>
+      <button class="btn main" id="saveRows" type="button">이 목록 저장</button>
+      <button class="btn" id="delSet" type="button">이 목록 삭제</button>
+      <span class="saved" id="savedMsg" hidden>저장했어요</span>
+    </div>
+    <div class="ctrl" style="margin-top:8px">
+      <input class="newname" id="newName" type="text" placeholder="새 목록 이름 (예: 평소 수업)" aria-label="새 목록 이름">
+      <button class="btn" id="saveAs" type="button">새 목록으로 저장</button>
+      <button class="btn" id="resetRows" type="button">기본 목록 다시 넣기</button>
+    </div>
+    <p class="note">목록은 이 컴퓨터의 크롬에 저장돼요. 다른 컴퓨터나 다른 선생님께는 "공유 링크 복사"로 링크를 보내면 같은 목록이 열려요.<br>"기본 목록 다시 넣기"는 역지사지 2차시와 기본 타이머를 처음 상태로 되돌려요. 직접 만든 목록은 그대로 남아요.</p>
+  </details>
+
+  <details id="optBox">
+    <summary>알림 설정</summary>
+    <div class="opts">
+      <label><input type="checkbox" id="optPre"> 30초 남으면 짧은 예고음</label>
+      <label><input type="checkbox" id="optAuto"> 알림을 끄면 다음 활동을 준비해 두기</label>
+      <label>끝날 때 소리
+        <select id="optSound">
+          <option value="harmony">잔잔한 화음</option>
+          <option value="bell">맑은 종소리</option>
+          <option value="beep">짧은 삐 소리</option>
+        </select>
+      </label>
+      <label>소리 크기 <input type="range" id="optVol" min="0" max="100" step="5"> <span id="volVal"></span></label>
+      <div class="ctrl"><button class="btn" id="preview" type="button">소리 미리 듣기</button></div>
+    </div>
+  </details>
+
+  <p class="note">끝나면 고른 소리가 클릭하거나 키를 누를 때까지 반복돼요. 소리는 시작이나 미리 듣기를 한 번 누른 뒤부터 나요. 1분 남으면 숫자가 주황색, 시간이 지나면 빨간색으로 초과 시간을 보여 줘요.<br>
+  "작게 띄우기"는 크롬에서 항상 위에 떠 있는 작은 창을 열어요. 브라우저가 막으면 이 탭을 따로 빼서 작게 줄여 쓰시면 돼요.</p>
+</div>
+
+<canvas id="cv" width="480" height="200" hidden></canvas>
+<video id="vid" muted playsinline hidden></video>
+
+<script>
+const DEFAULT_STEPS=[["입장 바꾸기",120],["입론 준비",360],["2차 토론",840],["토론 후 발표",180],
+  ["최종 의견",120],["합의안 토의",480],["제안서 쓰기",360],["합의안 발표",480]];
+const $=id=>document.getElementById(id);
+function load(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v==null?d:v}catch(e){return d}}
+function store(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function validSteps(a){return Array.isArray(a)&&a.length>0&&a.every(r=>Array.isArray(r)&&typeof r[0]==="string"&&r[1]>0)}
+const BUILTIN=[{name:"역지사지 2차시",steps:DEFAULT_STEPS},
+  {name:"기본 타이머",steps:[["1분",60],["3분",180],["5분",300],["10분",600],["15분",900]]}];
+function clone(x){return JSON.parse(JSON.stringify(x))}
+let DATA=load("tm_sets",null);
+if(!DATA||!Array.isArray(DATA.sets)||!DATA.sets.length||!DATA.sets.every(x=>x&&typeof x.name==="string"&&validSteps(x.steps))){
+  DATA={sets:clone(BUILTIN),active:BUILTIN[0].name};
+  const old=load("tm_steps",null);if(validSteps(old))DATA.sets.push({name:"내 목록",steps:old});
+}
+function curSet(){return DATA.sets.find(x=>x.name===DATA.active)||DATA.sets[0]}
+let STEPS=curSet().steps;
+let OPT=Object.assign({pre30:true,auto:true,sound:"harmony",vol:70},load("tm_opt",{}));
+let total=360,left=360,running=false,endAt=0,label="",ac=null,master=null,beeped=false,preDone=false,pipWin=null,cur=0;
+
+function dur(sec){const m=Math.floor(sec/60),s=sec%60;return (m?m+"분":"")+(s?(m?" ":"")+s+"초":"")||"0초"}
+function fmt(s){const neg=s<0;s=Math.abs(Math.round(s));const m=Math.floor(s/60),x=s%60;return (neg?"+":"")+String(m).padStart(2,"0")+":"+String(x).padStart(2,"0")}
+
+/* activity buttons */
+function renderSteps(){
+  const el=$("steps");el.innerHTML="";
+  STEPS.forEach(([n,sec],i)=>{const b=document.createElement("button");b.type="button";b.className="step";b.id="step"+i;
+    b.innerHTML=`<b>${dur(sec)}</b><small></small>`;b.querySelector("small").textContent=n;b.onclick=()=>goStep(i);el.appendChild(b)});
+  mark();
+}
+function mark(){document.querySelectorAll(".step").forEach((s,i)=>s.setAttribute("aria-pressed",i===cur?"true":"false"))}
+function goStep(i){if(i<0||i>=STEPS.length)return;cur=i;label=STEPS[i][0];setTotal(STEPS[i][1]);mark()}
+function setCustom(sec){if(sec>0){cur=-1;mark();setTotal(sec)}}
+function setTotal(sec){stopChime(false);running=false;total=sec;left=sec;beeped=false;preDone=sec<=30;draw()}
+
+/* drawing */
+function restSec(){let r=Math.max(0,left);if(cur>=0)for(let j=cur+1;j<STEPS.length;j++)r+=STEPS[j][1];return r}
+function nowText(){return new Date().toLocaleTimeString("ko-KR",{hour:"numeric",minute:"2-digit"})}
+function nextText(){return cur>=0&&cur<STEPS.length-1?"다음: "+STEPS[cur+1][0]:""}
+function goText(){return running?"일시정지":(left===total?"시작":"계속")}
+function draw(){
+  const c=$("clock");c.textContent=fmt(left);
+  c.classList.toggle("warn",left>0&&left<=60);c.classList.toggle("over",left<=0);
+  $("label").textContent=label;$("go").textContent=goText();
+  $("bar").style.transform=`scaleX(${Math.max(0,left)/Math.max(1,total)})`;
+  $("now").textContent=nowText();$("rest").textContent=fmt(restSec());$("nextInfo").textContent=nextText();
+  document.title=fmt(left)+" · 타이머";
+  paintPip();
+}
+function tick(){
+  if(running){left=(endAt-Date.now())/1000;
+    if(OPT.pre30&&!preDone&&left<=30&&left>0){preDone=true;ding()}
+    if(left<=0&&!beeped){beeped=true;alarm()}}
+  draw();
+}
+setInterval(tick,200);
+function start(){ensureAudio();if(running){running=false;left=Math.ceil((endAt-Date.now())/1000)}
+  else{endAt=Date.now()+left*1000;running=true}draw()}
+function shift(sec){if(running){endAt+=sec*1000;left=(endAt-Date.now())/1000}else{left+=sec}
+  total=Math.max(total,left);if(left>0)beeped=false;if(left>30)preDone=false;draw()}
+$("go").onclick=start;$("plus").onclick=()=>shift(60);$("minus").onclick=()=>shift(-60);
+$("reset").onclick=()=>setTotal(total);
+function readMS(mEl,sEl){const m=Math.max(0,parseInt(mEl.value,10)||0),x=Math.min(59,Math.max(0,parseInt(sEl.value,10)||0));return m*60+x}
+$("set").onclick=()=>{const s=readMS($("mins"),$("secs"));if(s>0){label="직접 설정";setCustom(s)}};
+
+/* keyboard: Space, arrows, + and - (ignored while typing) */
+function onKeys(e){
+  const t=e.target;if(t&&(t.isContentEditable||/^(INPUT|SELECT|TEXTAREA)$/.test(t.tagName)))return;
+  if(e.key===" "){e.preventDefault();start()}
+  else if(e.key==="ArrowRight"){e.preventDefault();goStep(cur<0?0:cur+1)}
+  else if(e.key==="ArrowLeft"){e.preventDefault();goStep(cur<0?0:cur-1)}
+  else if(e.key==="+"||e.key==="="){e.preventDefault();shift(60)}
+  else if(e.key==="-"||e.key==="_"){e.preventDefault();shift(-60)}
+}
+document.addEventListener("keydown",onKeys);
+function noSpaceClick(doc){doc.addEventListener("keyup",e=>{if(e.key===" "&&e.target&&e.target.tagName==="BUTTON")e.preventDefault()},true)}
+noSpaceClick(document);
+
+/* sound */
+function ensureAudio(){try{if(!ac){ac=new (window.AudioContext||window.webkitAudioContext)();master=ac.createGain();master.connect(ac.destination)}
+  master.gain.value=OPT.vol/100;ac.resume&&ac.resume()}catch(e){}}
+function tone(f,t0,d,vol,type){const o=ac.createOscillator(),g=ac.createGain();o.type=type;o.frequency.value=f;o.connect(g);g.connect(master);
+  g.gain.setValueAtTime(0.0001,t0);g.gain.exponentialRampToValueAtTime(vol,t0+0.03);g.gain.exponentialRampToValueAtTime(0.0001,t0+d);o.start(t0);o.stop(t0+d+0.05)}
+const CHORDS=[[261.63,329.63,392.00,523.25],[293.66,349.23,440.00,587.33],[261.63,329.63,392.00,523.25],[246.94,293.66,392.00,493.88]];
+let chimeTimer=null,chimeStep=0;
+const SOUNDS={
+  harmony:{every:2600,play(){const c=CHORDS[chimeStep++%CHORDS.length],t=ac.currentTime+0.02;
+    c.forEach((f,i)=>tone(f*2,t+i*0.16,1.6,0.09,"sine"));c.slice(0,3).forEach(f=>tone(f,t,2.4,0.05,"triangle"))}},
+  bell:{every:3000,play(){const t=ac.currentTime+0.02;tone(1046.5,t,2.4,0.14,"sine");tone(2093,t,1.2,0.04,"sine");tone(1568,t+0.01,1.6,0.05,"sine")}},
+  beep:{every:2000,play(){const t=ac.currentTime+0.02;[0,0.35,0.7].forEach(d=>tone(880,t+d,0.25,0.2,"square"))}}
+};
+function playOnce(){if(!ac)return;try{(SOUNDS[OPT.sound]||SOUNDS.harmony).play()}catch(e){}}
+function ding(){if(!ac)return;try{const t=ac.currentTime+0.02;tone(784,t,0.9,0.1,"sine");tone(1175,t+0.12,0.8,0.05,"sine")}catch(e){}}
+function alarm(){stopChime(false);if(!ac)return;chimeStep=0;playOnce();chimeTimer=setInterval(playOnce,(SOUNDS[OPT.sound]||SOUNDS.harmony).every);$("stop").hidden=false;draw()}
+function stopChime(byUser){const was=!!chimeTimer;if(chimeTimer){clearInterval(chimeTimer);chimeTimer=null}$("stop").hidden=true;
+  if(byUser&&was&&OPT.auto&&cur>=0&&cur<STEPS.length-1)goStep(cur+1)}
+/* the click or key that silences the alarm does only that */
+let swallow=false;
+function guard(doc){
+  doc.addEventListener("pointerdown",()=>{if(chimeTimer){stopChime(true);swallow=true;setTimeout(()=>swallow=false,700)}},true);
+  doc.addEventListener("click",e=>{if(swallow){swallow=false;e.stopPropagation();e.preventDefault()}},true);
+  doc.addEventListener("keydown",e=>{if(chimeTimer){stopChime(true);e.stopPropagation();e.preventDefault()}},true);
+}
+guard(document);
+
+/* activity list editor */
+function rowHTML(n,sec,i){const d=document.createElement("div");d.className="row";
+  d.innerHTML=`<input type="text" id="rn${i}" aria-label="활동 이름"><input type="number" id="rm${i}" min="0" max="99" aria-label="분"><span>분</span><input type="number" id="rs${i}" min="0" max="59" step="5" aria-label="초"><span>초</span><button class="btn del" type="button">삭제</button>`;
+  d.querySelector("#rn"+i).value=n;d.querySelector("#rm"+i).value=Math.floor(sec/60);d.querySelector("#rs"+i).value=sec%60;
+  d.querySelector(".del").onclick=()=>d.remove();return d}
+let rowSeq=0;
+function fillRows(){const r=$("rows");r.innerHTML="";STEPS.forEach(([n,s])=>r.appendChild(rowHTML(n,s,rowSeq++)))}
+$("addRow").onclick=()=>$("rows").appendChild(rowHTML("새 활동",300,rowSeq++));
+function readRows(){const out=[];$("rows").querySelectorAll(".row").forEach(d=>{const ins=d.querySelectorAll("input");
+  const n=ins[0].value.trim(),x=readMS(ins[1],ins[2]);if(n&&x>0)out.push([n,x])});return out}
+function saveData(){store("tm_sets",DATA)}
+let msgT=null;function listMsg(t){const m=$("listMsg");m.textContent=t;m.hidden=!t;clearTimeout(msgT);if(t)msgT=setTimeout(()=>m.hidden=true,6000)}
+function renderSetSel(){const sel=$("setSel");sel.innerHTML="";DATA.sets.forEach(x=>{const o=document.createElement("option");o.value=x.name;o.textContent=x.name;sel.appendChild(o)});sel.value=curSet().name}
+function useSet(name){DATA.active=name;STEPS=curSet().steps;saveData();renderSetSel();renderSteps();fillRows();$("shareOut").hidden=true;if(!running)goStep(0);else cur=-1,mark()}
+$("setSel").onchange=e=>useSet(e.target.value);
+$("saveRows").onclick=()=>{const out=readRows();if(!out.length){listMsg("활동을 하나 이상 넣어 주세요");return}
+  curSet().steps=out;STEPS=out;saveData();renderSteps();if(!running)goStep(0);else cur=-1,mark();fillRows();
+  const m=$("savedMsg");m.hidden=false;setTimeout(()=>m.hidden=true,1800)};
+$("saveAs").onclick=()=>{const name=$("newName").value.trim(),out=readRows();
+  if(!name){listMsg("새 목록 이름을 적어 주세요");$("newName").focus();return}
+  if(DATA.sets.some(x=>x.name===name)){listMsg("'"+name+"'은 이미 있는 이름이에요. 다른 이름을 적어 주세요");return}
+  if(!out.length){listMsg("활동을 하나 이상 넣어 주세요");return}
+  DATA.sets.push({name,steps:out});$("newName").value="";useSet(name);listMsg("'"+name+"' 목록을 만들었어요")};
+let delArm=false,delT=null;
+$("delSet").onclick=()=>{if(DATA.sets.length<=1){listMsg("목록이 하나뿐이라 지울 수 없어요");return}
+  if(!delArm){delArm=true;$("delSet").textContent="한 번 더 누르면 삭제";clearTimeout(delT);delT=setTimeout(()=>{delArm=false;$("delSet").textContent="이 목록 삭제"},3000);return}
+  delArm=false;$("delSet").textContent="이 목록 삭제";const gone=curSet().name;DATA.sets=DATA.sets.filter(x=>x.name!==gone);useSet(DATA.sets[0].name);listMsg("'"+gone+"' 목록을 지웠어요")};
+$("resetRows").onclick=()=>{BUILTIN.forEach(b=>{const i=DATA.sets.findIndex(x=>x.name===b.name);if(i>=0)DATA.sets[i]=clone(b);else DATA.sets.push(clone(b))});
+  useSet(BUILTIN[0].name);listMsg("기본 목록을 처음 상태로 되돌렸어요")};
+
+/* share: the list rides in the link after #list= */
+function enc(o){return btoa(unescape(encodeURIComponent(JSON.stringify(o)))).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"")}
+function dec(t){t=t.replace(/-/g,"+").replace(/_/g,"/");while(t.length%4)t+="=";return JSON.parse(decodeURIComponent(escape(atob(t))))}
+function importHash(){const m=location.hash.match(/^#list=(.+)$/);if(!m)return false;
+  try{const o=dec(m[1]);if(!o||typeof o.n!=="string"||!validSteps(o.s))return false;
+    let name=o.n.trim()||"공유받은 목록";const same=DATA.sets.find(x=>x.name===name);
+    if(!(same&&JSON.stringify(same.steps)===JSON.stringify(o.s))){
+      if(same){let k=2;while(DATA.sets.some(x=>x.name===name+" ("+k+")"))k++;name=name+" ("+k+")"}
+      DATA.sets.push({name,steps:o.s})}
+    DATA.active=name;STEPS=curSet().steps;saveData();
+    try{history.replaceState(null,"",location.pathname+location.search)}catch(e){}
+    listMsg("공유받은 '"+name+"' 목록을 불러왔어요");return true}catch(e){return false}}
+window.addEventListener("hashchange",()=>{if(importHash())useSet(DATA.active)});
+$("share").onclick=()=>{const url=location.href.split("#")[0]+"#list="+enc({n:curSet().name,s:STEPS}),out=$("shareOut");out.value=url;
+  const note=location.protocol==="file:"?" 지금은 내 컴퓨터 파일로 열려 있어서 다른 사람은 이 링크를 열 수 없어요. GitHub 주소로 열어서 다시 복사해 주세요.":" 받은 사람이 열면 이 목록이 바로 떠요.";
+  const manual=()=>{out.hidden=false;out.focus();out.select();listMsg("아래 링크를 복사해 주세요."+note)};
+  try{navigator.clipboard.writeText(url).then(()=>{out.hidden=true;listMsg("공유 링크를 복사했어요."+note)},manual)}catch(e){manual()}};
+
+/* alert settings */
+$("optPre").checked=!!OPT.pre30;$("optAuto").checked=!!OPT.auto;$("optSound").value=OPT.sound;$("optVol").value=OPT.vol;$("volVal").textContent=OPT.vol+"%";
+function saveOpt(){OPT.pre30=$("optPre").checked;OPT.auto=$("optAuto").checked;OPT.sound=$("optSound").value;OPT.vol=+$("optVol").value;
+  $("volVal").textContent=OPT.vol+"%";if(master)master.gain.value=OPT.vol/100;store("tm_opt",OPT)}
+["optPre","optAuto","optSound","optVol"].forEach(id=>$(id).addEventListener("input",saveOpt));
+$("preview").onclick=()=>{ensureAudio();playOnce()};
+
+/* mini window: Document PiP first, then video PiP of a canvas */
+function css(v){return getComputedStyle(document.documentElement).getPropertyValue(v).trim()}
+function paintPip(){
+  if(pipWin&&!pipWin.closed){const d=pipWin.document,c=d.getElementById("c");if(c){c.textContent=fmt(left);
+    c.style.color=left<=0?css("--done"):(left<=60?css("--warn"):css("--ink"));
+    const le=d.getElementById("l");if(d.activeElement!==le)le.textContent=label;
+    d.getElementById("g").textContent=goText();
+    d.getElementById("i").textContent="지금 "+nowText()+" · 남은 합계 "+fmt(restSec())+(nextText()?" · "+nextText():"")}}
+  const vid=$("vid");if(document.pictureInPictureElement===vid){const cv=$("cv"),x=cv.getContext("2d");
+    x.fillStyle=css("--surface");x.fillRect(0,0,480,200);x.fillStyle=css("--muted");x.font="600 26px "+css("--f-body");x.fillText(label,24,44);
+    x.fillStyle=left<=0?css("--done"):(left<=60?css("--warn"):css("--ink"));x.font="800 110px "+css("--f-num");x.fillText(fmt(left),20,165)}
+}
+function say(t){const m=$("msg");m.textContent=t;m.hidden=!t}
+$("pip").onclick=async()=>{
+  say("");
+  if("documentPictureInPicture" in window){
+    try{
+      pipWin=await documentPictureInPicture.requestWindow({width:340,height:240});
+      const d=pipWin.document;
+      d.body.innerHTML=`<div class="t"><button id="pv" aria-label="이전 활동">◀</button><div id="l" contenteditable="true" spellcheck="false" title="눌러서 직접 쓰기"></div><button id="nx" aria-label="다음 활동">▶</button></div><div id="c"></div><div class="r"><button id="g">시작</button><button id="p">+1분</button><button id="q">−1분</button></div><div class="r s"><input id="mm" type="number" min="0" max="99" value="5" aria-label="분"><span>분</span><input id="ss" type="number" min="0" max="59" step="5" value="0" aria-label="초"><span>초</span><button id="k">설정</button></div><div id="i"></div>`;
+      const st=d.createElement("style");
+      /* sizes follow the mini window: drag it bigger and the time grows with it */
+      st.textContent=`html,body{height:100%}body{margin:0;box-sizing:border-box;padding:3vh 5vw;background:${css("--surface")};color:${css("--ink")};font-family:${css("--f-body")};
+          display:grid;grid-template-rows:auto 1fr auto auto auto;align-items:center;gap:1vh;overflow:hidden}
+        .t{display:flex;align-items:center;gap:2vw;min-width:0}
+        #l{flex:1;min-width:0;color:${css("--muted")};font-size:max(12px,min(5vw,9vh));font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+          outline:none;border-bottom:1px dashed ${css("--line")};padding:.1em .2em;cursor:text}
+        #l:focus{color:${css("--ink")};border-bottom-color:${css("--vio")};text-overflow:clip}
+        #c{font-family:${css("--f-num")};font-weight:800;font-size:max(28px,min(30vw,46vh));line-height:1;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap}
+        .r{display:flex;gap:2vw;align-items:center;flex-wrap:wrap}.s{font-size:max(12px,min(4vw,7vh))}
+        #i{color:${css("--muted")};font-size:max(10px,min(3.2vw,5.5vh));white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-variant-numeric:tabular-nums}
+        input{font:inherit;font-size:max(12px,min(4vw,7vh));width:3.2em;padding:.2em .3em;border-radius:6px;border:1px solid ${css("--line")};background:${css("--surface")};color:${css("--ink")}}
+        button{font:inherit;font-size:max(12px,min(4vw,7vh));padding:.3em .8em;border-radius:8px;border:1px solid ${css("--line")};background:${css("--surface")};color:${css("--ink")};cursor:pointer}`;
+      d.head.appendChild(st);
+      d.getElementById("pv").onclick=()=>goStep(cur<0?0:cur-1);d.getElementById("nx").onclick=()=>goStep(cur<0?0:cur+1);
+      const le=d.getElementById("l");
+      le.addEventListener("input",()=>{label=le.textContent.trim()||"타이머";$("label").textContent=label});
+      le.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();le.blur()}});
+      d.getElementById("g").onclick=start;d.getElementById("p").onclick=()=>shift(60);d.getElementById("q").onclick=()=>shift(-60);
+      d.getElementById("k").onclick=()=>setCustom(readMS(d.getElementById("mm"),d.getElementById("ss")));
+      guard(d);d.addEventListener("keydown",onKeys);noSpaceClick(d);
+      draw();return;
+    }catch(e){/* fall through to video PiP */}
+  }
+  try{
+    const cv=$("cv"),vid=$("vid");paintPip();
+    if(!vid.srcObject){vid.srcObject=cv.captureStream(5)}
+    await vid.play();await vid.requestPictureInPicture();paintPip();
+    const loop=()=>{if(document.pictureInPictureElement===vid){paintPip();requestAnimationFrame(loop)}};
+    const x=cv.getContext("2d");x.fillStyle=css("--surface");x.fillRect(0,0,480,200);loop();
+  }catch(e){
+    say("이 화면에서는 작게 띄우기가 막혀 있어요. 이 탭을 브라우저 밖으로 끌어내 작은 창으로 줄여 쓰시거나, 윈도우 시계 앱의 '항상 위에 표시'를 써 주세요.");
+  }
+};
+
+importHash();renderSetSel();renderSteps();fillRows();goStep(0);
+</script>
+</body>
+</html>
